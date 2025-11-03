@@ -2,6 +2,7 @@ import customtkinter as ctk
 import json
 import os
 import sys
+import datetime
 
 # === Настройки на темата ===
 ctk.set_appearance_mode("System")
@@ -63,7 +64,8 @@ def add_expense():
         expense = float(expense_entry.get())
         comment = comment_entry.get().strip() or "Без коментар"
         remaining -= expense
-        expenses.append({"amount": expense, "comment": comment})
+        today = datetime.date.today().strftime("%d.%m.%Y")  # форматира дата като 03.11.2025
+        expenses.append({"amount": expense, "comment": comment, "date": today})
         update_label()
         update_expense_list()
         expense_entry.delete(0, 'end')
@@ -100,11 +102,11 @@ def update_expense_list():
         expense_box.insert("end", "Няма въведени разходи.\n")
     else:
         for i, e in enumerate(expenses, start=1):
-            expense_box.insert("end", f"{i}. -{e['amount']:.2f} лв  |  {e['comment']}\n")
+            expense_box.insert("end", f"{i}. -{e['amount']:.2f} лв  |  {e['comment']} | {e['date']}\n")
     expense_box.configure(state="disabled")
 
 # === UI елементи ===
-title_label = ctk.CTkLabel(app, text="💰 Управление на бюджет", font=("Arial", 22, "bold"))
+title_label = ctk.CTkLabel(app, text="💰 Разходи за храна за м. 11.2025г.", font=("Arial", 22, "bold"))
 title_label.pack(pady=20)
 
 # --- Поле за начален бюджет ---
