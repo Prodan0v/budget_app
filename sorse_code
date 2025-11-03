@@ -18,154 +18,175 @@ def resource_path(filename):
 
 DATA_FILE = resource_path("budget_data.json")
 
-# === Функции за зареждане/запазване ===
+# === Функции за зареждане/запазване на данни ===
 def load_data():
     if os.path.exists(DATA_FILE):
         with open(DATA_FILE, "r", encoding="utf-8") as f:
             try:
                 return json.load(f)
             except json.JSONDecodeError:
-                return {"budget": 0, "remaining": 0, "expenses": []}
-    return {"budget": 0, "remaining": 0, "expenses": []}
+                return {"food": {"budget":0,"remaining":0,"expenses":[]},
+                        "other": {"budget":0,"remaining":0,"expenses":[]}}
+    return {"food": {"budget":0,"remaining":0,"expenses":[]},
+            "other": {"budget":0,"remaining":0,"expenses":[]}}
 
 def save_data():
-    data = {"budget": budget, "remaining": remaining, "expenses": expenses}
+    data = {
+        "food": {
+            "budget": food_section.budget,
+            "remaining": food_section.remaining,
+            "expenses": food_section.expenses
+        },
+        "other": {
+            "budget": other_section.budget,
+            "remaining": other_section.remaining,
+            "expenses": other_section.expenses
+        }
+    }
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=4)
 
-# === Зареждане на данни при стартиране ===
-data = load_data()
-budget = data["budget"]
-remaining = data["remaining"]
-expenses = data["expenses"]
+# === Клас за секция на разходите ===
+class ExpenseSection:
+    def __init__(self, master, title):
+        self.master = master
+        self.title = title
+        self.budget = 0
+        self.remaining = 0
+        self.expenses = []
 
-# === Основен прозорец ===
+        # Рамка за секцията
+        self.frame = ctk.CTkFrame(master)
+        self.frame.pack(side="left", padx=10, pady=10)
+
+        # Заглавие
+        self.title_label = ctk.CTkLabel(self.frame, text=title, font=("Arial", 22, "bold"))
+        self.title_label.pack(pady=20)
+
+        # --- Поле за начален бюджет ---
+        budget_frame = ctk.CTkFrame(self.frame)
+        budget_frame.pack(pady=10)
+        budget_label = ctk.CTkLabel(budget_frame, text="Начален бюджет:")
+        budget_label.pack(side="left", padx=5)
+        self.budget_entry = ctk.CTkEntry(budget_frame, width=100)
+        self.budget_entry.pack(side="left", padx=5)
+        budget_button = ctk.CTkButton(budget_frame, text="Задай", command=self.set_budget)
+        budget_button.pack(side="left", padx=5)
+
+        # --- Полета за разход ---
+        expense_frame = ctk.CTkFrame(self.frame)
+        expense_frame.pack(pady=10)
+        expense_label = ctk.CTkLabel(expense_frame, text="Добави разход:")
+        expense_label.pack(side="left", padx=5)
+        self.expense_entry = ctk.CTkEntry(expense_frame, width=100)
+        self.expense_entry.pack(side="left", padx=5)
+        expense_button = ctk.CTkButton(expense_frame, text="Добави", command=self.add_expense)
+        expense_button.pack(side="left", padx=5)
+
+        # --- Поле за коментар ---
+        comment_frame = ctk.CTkFrame(self.frame)
+        comment_frame.pack(pady=5)
+        comment_label = ctk.CTkLabel(comment_frame, text="Коментар:")
+        comment_label.pack(side="left", padx=5)
+        self.comment_entry = ctk.CTkEntry(comment_frame, width=200, placeholder_text="напр. кафе, храна, гориво...")
+        self.comment_entry.pack(side="left", padx=5)
+
+        # --- Прогрес бар ---
+        self.progress_bar = ctk.CTkProgressBar(self.frame, width=300)
+        self.progress_bar.pack(pady=(15,5))
+        self.progress_bar.set(0)
+        self.percent_label = ctk.CTkLabel(self.frame, text="Изразходвани: 0%", font=("Arial",14))
+        self.percent_label.pack()
+
+        # --- Резултат ---
+        self.result_label = ctk.CTkLabel(self.frame, text="", font=("Arial",16))
+        self.result_label.pack(pady=10)
+
+        # --- История на разходите ---
+        self.expense_box = ctk.CTkTextbox(self.frame, width=350, height=200, state="disabled")
+        self.expense_box.pack(pady=10)
+
+        # --- Бутон за нов месец ---
+        reset_button = ctk.CTkButton(self.frame, text="🧹 Нов месец", command=self.reset_budget)
+        reset_button.pack(pady=10)
+
+    def set_budget(self):
+        try:
+            self.budget = float(self.budget_entry.get())
+            self.remaining = self.budget
+            self.expenses = []
+            self.update_ui()
+            self.budget_entry.delete(0,'end')
+            save_data()
+        except ValueError:
+            self.result_label.configure(text="⚠️ Въведи валидна сума!", text_color="red")
+
+    def add_expense(self):
+        try:
+            expense = float(self.expense_entry.get())
+            comment = self.comment_entry.get().strip() or "Без коментар"
+            today = datetime.date.today().strftime("%d.%m.%Y")
+            self.remaining -= expense
+            self.expenses.append({"amount": expense, "comment": comment, "date": today})
+            self.update_ui()
+            self.expense_entry.delete(0,'end')
+            self.comment_entry.delete(0,'end')
+            save_data()
+        except ValueError:
+            self.result_label.configure(text="⚠️ Въведи валидна сума!", text_color="red")
+
+    def reset_budget(self):
+        from tkinter import messagebox
+        confirm = messagebox.askyesno("🧹 Нов месец", f"Сигурен ли си, че искаш да изчистиш {self.title}?")
+        if confirm:
+            self.budget = 0
+            self.remaining = 0
+            self.expenses = []
+            self.update_ui()
+            save_data()
+
+    def update_ui(self):
+        # Прогрес бар
+        percent_used = 0 if self.budget == 0 else ((self.budget - self.remaining)/self.budget)*100
+        self.progress_bar.set(percent_used/100)
+        self.percent_label.configure(text=f"Изразходвани: {percent_used:.1f}%")
+        # Резултат
+        self.result_label.configure(
+            text=f"Оставащ бюджет: {self.remaining:.2f} лв от {self.budget:.2f} лв",
+            text_color="green" if self.remaining>=0 else "red"
+        )
+        # История
+        self.expense_box.configure(state="normal")
+        self.expense_box.delete("1.0","end")
+        if not self.expenses:
+            self.expense_box.insert("end", "Няма въведени разходи.\n")
+        else:
+            for i,e in enumerate(self.expenses,start=1):
+                self.expense_box.insert("end", f"{i}. -{e['amount']:.2f} лв  |  {e['comment']} | {e['date']}\n")
+        self.expense_box.configure(state="disabled")
+
+# === Главен прозорец ===
 app = ctk.CTk()
-app.title("💰 Моят бюджет")
-app.geometry("450x600")
+app.title("💰 Моят бюджет по категории")
+app.geometry("750x600")  # по-широк за двата блока
 
-# === Функции за логика ===
-def set_budget():
-    global budget, remaining, expenses
-    try:
-        budget = float(budget_entry.get())
-        remaining = budget
-        expenses = []
-        update_label()
-        update_expense_list()
-        budget_entry.delete(0, 'end')
-        save_data()
-    except ValueError:
-        result_label.configure(text="⚠️ Въведи валидна сума!", text_color="red")
+# === Създаваме секции ===
+food_section = ExpenseSection(app, "💰 Разходи за храна")
+other_section = ExpenseSection(app, "💰 Други разходи")
 
-def add_expense():
-    global remaining
-    try:
-        expense = float(expense_entry.get())
-        comment = comment_entry.get().strip() or "Без коментар"
-        remaining -= expense
-        today = datetime.date.today().strftime("%d.%m.%Y")  # форматира дата като 03.11.2025
-        expenses.append({"amount": expense, "comment": comment, "date": today})
-        update_label()
-        update_expense_list()
-        expense_entry.delete(0, 'end')
-        comment_entry.delete(0, 'end')
-        save_data()
-    except ValueError:
-        result_label.configure(text="⚠️ Въведи валидна сума!", text_color="red")
+# === Зареждаме данни от JSON ===
+data = load_data()
 
-def reset_budget():
-    global budget, remaining, expenses
-    from tkinter import messagebox
-    confirm = messagebox.askyesno("🧹 Нов месец", "Сигурен ли си, че искаш да изчистиш всичко и да започнеш наново?")
-    if confirm:
-        budget = 0
-        remaining = 0
-        expenses = []
-        update_label()
-        update_expense_list()
-        save_data()
+# Възстановяване на „Храна“
+food_section.budget = data["food"]["budget"]
+food_section.remaining = data["food"]["remaining"]
+food_section.expenses = data["food"]["expenses"]
+food_section.update_ui()
 
-def update_label():
-    percent_used = 0 if budget == 0 else ((budget - remaining) / budget) * 100
-    result_label.configure(
-        text=f"Оставащ бюджет: {remaining:.2f} лв от {budget:.2f} лв",
-        text_color="green" if remaining >= 0 else "red"
-    )
-    progress_bar.set(percent_used / 100)
-    percent_label.configure(text=f"Изразходвани: {percent_used:.1f}%")
-
-def update_expense_list():
-    expense_box.configure(state="normal")
-    expense_box.delete("1.0", "end")
-    if not expenses:
-        expense_box.insert("end", "Няма въведени разходи.\n")
-    else:
-        for i, e in enumerate(expenses, start=1):
-            expense_box.insert("end", f"{i}. -{e['amount']:.2f} лв  |  {e['comment']} | {e['date']}\n")
-    expense_box.configure(state="disabled")
-
-# === UI елементи ===
-title_label = ctk.CTkLabel(app, text="💰 Разходи за храна за м. 11.2025г.", font=("Arial", 22, "bold"))
-title_label.pack(pady=20)
-
-# --- Поле за начален бюджет ---
-budget_frame = ctk.CTkFrame(app)
-budget_frame.pack(pady=10)
-
-budget_label = ctk.CTkLabel(budget_frame, text="Начален бюджет:")
-budget_label.pack(side="left", padx=5)
-
-budget_entry = ctk.CTkEntry(budget_frame, width=100)
-budget_entry.pack(side="left", padx=5)
-
-budget_button = ctk.CTkButton(budget_frame, text="Задай", command=set_budget)
-budget_button.pack(side="left", padx=5)
-
-# --- Полета за разход ---
-expense_frame = ctk.CTkFrame(app)
-expense_frame.pack(pady=10)
-
-expense_label = ctk.CTkLabel(expense_frame, text="Добави разход:")
-expense_label.pack(side="left", padx=5)
-
-expense_entry = ctk.CTkEntry(expense_frame, width=100)
-expense_entry.pack(side="left", padx=5)
-
-expense_button = ctk.CTkButton(expense_frame, text="Добави", command=add_expense)
-expense_button.pack(side="left", padx=5)
-
-# --- Поле за коментар ---
-comment_frame = ctk.CTkFrame(app)
-comment_frame.pack(pady=5)
-
-comment_label = ctk.CTkLabel(comment_frame, text="Коментар:")
-comment_label.pack(side="left", padx=5)
-
-comment_entry = ctk.CTkEntry(comment_frame, width=200, placeholder_text="напр. кафе, храна, гориво...")
-comment_entry.pack(side="left", padx=5)
-
-# --- Прогрес бар ---
-progress_bar = ctk.CTkProgressBar(app, width=300)
-progress_bar.pack(pady=(15, 5))
-progress_bar.set(0)
-
-percent_label = ctk.CTkLabel(app, text="Изразходвани: 0%", font=("Arial", 14))
-percent_label.pack()
-
-# --- Резултат ---
-result_label = ctk.CTkLabel(app, text="", font=("Arial", 16))
-result_label.pack(pady=10)
-
-# --- История на разходите ---
-expense_box = ctk.CTkTextbox(app, width=350, height=200, state="disabled")
-expense_box.pack(pady=10)
-
-# --- Бутон за нов месец ---
-reset_button = ctk.CTkButton(app, text="🧹 Нов месец", command=reset_budget)
-reset_button.pack(pady=10)
-
-update_label()
-update_expense_list()
+# Възстановяване на „Други“
+other_section.budget = data["other"]["budget"]
+other_section.remaining = data["other"]["remaining"]
+other_section.expenses = data["other"]["expenses"]
+other_section.update_ui()
 
 app.mainloop()
