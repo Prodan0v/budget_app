@@ -8,7 +8,7 @@ import datetime
 ctk.set_appearance_mode("System")
 ctk.set_default_color_theme("green")
 
-# === Функция за правилен път към JSON, работи и с .exe ===
+# == Функция за правилен път към JSON, работи и с .exe ===
 def resource_path(filename):
     if getattr(sys, 'frozen', False):
         base_path = os.path.dirname(sys.executable)
@@ -45,6 +45,7 @@ def save_data():
     }
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=4)
+    update_total_progress()
 
 # === Клас за секция на разходите ===
 class ExpenseSection:
@@ -167,12 +168,48 @@ class ExpenseSection:
 
 # === Главен прозорец ===
 app = ctk.CTk()
-app.title("💰 Моят бюджет по категории")
-app.geometry("750x600")  # по-широк за двата блока
+app.title("💰 Моят бюджет по категории за м. 11.2025г.")
+app.geometry("800x600")
 
-# === Създаваме секции ===
-food_section = ExpenseSection(app, "💰 Разходи за храна")
-other_section = ExpenseSection(app, "💰 Други разходи")
+
+# === Създаваме контейнер за двете секции ===
+section_frame = ctk.CTkFrame(app)
+section_frame.pack(pady=10)
+
+# === Създаваме двете секции ===
+food_section = ExpenseSection(section_frame, "🥗 Разходи за храна")
+other_section = ExpenseSection(section_frame, "🧾 Други разходи")
+
+# === Общ прогрес бар и етикети ===
+total_label = ctk.CTkLabel(app, text="📊 Общ бюджет:", font=("Arial", 18, "bold"))
+total_label.pack(pady=(10, 5))
+
+total_progress = ctk.CTkProgressBar(app, width=500)
+total_progress.pack(pady=5)
+total_progress.set(0)
+
+total_percent_label = ctk.CTkLabel(app, text="Изразходвани: 0%", font=("Arial",14))
+total_percent_label.pack()
+
+total_remaining_label = ctk.CTkLabel(app, text="", font=("Arial", 16))
+total_remaining_label.pack(pady=10)
+
+# === Функция за обновяване на общата информация ===
+def update_total_progress():
+    total_budget = food_section.budget + other_section.budget
+    total_remaining = food_section.remaining + other_section.remaining
+    if total_budget > 0:
+        percent_used = ((total_budget - total_remaining) / total_budget) * 100
+        total_progress.set(percent_used / 100)
+        total_percent_label.configure(text=f"Изразходвани: {percent_used:.1f}%")
+        total_remaining_label.configure(
+            text=f"Оставащ общ бюджет: {total_remaining:.2f} лв от {total_budget:.2f} лв",
+            text_color="green" if total_remaining >= 0 else "red"
+        )
+    else:
+        total_progress.set(0)
+        total_percent_label.configure(text="Изразходвани: 0%")
+        total_remaining_label.configure(text="")
 
 # === Зареждаме данни от JSON ===
 data = load_data()
@@ -188,5 +225,9 @@ other_section.budget = data["other"]["budget"]
 other_section.remaining = data["other"]["remaining"]
 other_section.expenses = data["other"]["expenses"]
 other_section.update_ui()
+
+# Обновяване на общия прогрес при стартиране
+update_total_progress()
+
 
 app.mainloop()
